@@ -2,7 +2,7 @@
 
 <b> To run: </b>
 
--source both .sql files inside mysql and run them. `Source <absolute path to file>`.
+-source both .sql files inside mysql and run them. `Source <absolute path to file>`. Run lms.sql first, the usr.sql.
 
 -Run `npm install` in both the api and the client folders
 
