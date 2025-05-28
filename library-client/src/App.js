@@ -11,9 +11,23 @@ import axios from 'axios';
 // API functions - defined once
 const API_URL = 'http://localhost:5000/api';
 
+const getAuthHeader = () => {
+  const username = localStorage.getItem('username');
+  const password = username === 'library_staff' ? 'staff_password' : 'view_password';
+  
+  if (username) {
+    return {
+      headers: {
+        'Authorization': `Basic ${btoa(`${username}:${password}`)}` 
+      }
+    };
+  }
+  return {};
+};
+
 const fetchBooks = async () => {
   try {
-    const response = await axios.get(`${API_URL}/books`);
+    const response = await axios.get(`${API_URL}/books`, getAuthHeader());
     return response.data;
   } catch (error) {
     console.error('Error fetching books:', error);
@@ -23,7 +37,7 @@ const fetchBooks = async () => {
 
 const fetchBookByISBN = async (isbn) => {
   try {
-    const response = await axios.get(`${API_URL}/books/${isbn}`);
+    const response = await axios.get(`${API_URL}/books/${isbn}`, getAuthHeader());
     return response.data;
   } catch (error) {
     console.error('Error fetching book:', error);
@@ -33,7 +47,10 @@ const fetchBookByISBN = async (isbn) => {
 
 const updateBookAvailability = async (isbn, availabilityStatus) => {
   try {
-    const response = await axios.put(`${API_URL}/books/${isbn}`, { availabilityStatus });
+    const response = await axios.put(`${API_URL}/books/${isbn}`, 
+      { availabilityStatus }, 
+      getAuthHeader()
+    );
     return response.data;
   } catch (error) {
     console.error('Error updating book:', error);
@@ -43,7 +60,7 @@ const updateBookAvailability = async (isbn, availabilityStatus) => {
 
 const fetchCustomers = async () => {
   try {
-    const response = await axios.get(`${API_URL}/customers`);
+    const response = await axios.get(`${API_URL}/customers`, getAuthHeader());
     return response.data;
   } catch (error) {
     console.error('Error fetching customers:', error);
@@ -53,7 +70,7 @@ const fetchCustomers = async () => {
 
 const fetchBorrowings = async () => {
   try {
-    const response = await axios.get(`${API_URL}/borrowings`);
+    const response = await axios.get(`${API_URL}/borrowings`, getAuthHeader());
     return response.data;
   } catch (error) {
     console.error('Error fetching borrowings:', error);
@@ -63,14 +80,16 @@ const fetchBorrowings = async () => {
 
 const addBorrowing = async (borrowingData) => {
   try {
-    const response = await axios.post(`${API_URL}/borrowings`, borrowingData);
+    const response = await axios.post(`${API_URL}/borrowings`, 
+      borrowingData,
+      getAuthHeader()
+    );
     return response.data;
   } catch (error) {
     console.error('Error adding borrowing:', error);
     throw error;
   }
 };
-
 // CSS Styles - using CSS-in-JS pattern with a style object
 const styles = {
   app: {
@@ -481,29 +500,27 @@ function AddBorrowing() {
 // Main App Component
 function App() {
   return (
-    <BrowserRouter>
-      <div style={styles.app}>
-        <header style={styles.appHeader}>
-          <h1 style={styles.appHeaderH1}>Library Management System</h1>
-          <nav>
-            <ul style={styles.navUl}>
-              <li style={styles.navLi}><Link style={styles.navA} to="/">Books</Link></li>
-              <li style={styles.navLi}><Link style={styles.navA} to="/customers">Customers</Link></li>
-              <li style={styles.navLi}><Link style={styles.navA} to="/borrowings">Borrowings</Link></li>
-              <li style={styles.navLi}><Link style={styles.navA} to="/add-borrowing">Add Borrowing</Link></li>
-            </ul>
-          </nav>
-        </header>
-        <main className="app-content">
-          <Routes>
-            <Route path="/" element={<BookList />} />
-            <Route path="/customers" element={<CustomerList />} />
-            <Route path="/borrowings" element={<BorrowingList />} />
-            <Route path="/add-borrowing" element={<AddBorrowing />} />
-          </Routes>
-        </main>
-      </div>
-    </BrowserRouter>
+    <div style={styles.app}>
+      <header style={styles.appHeader}>
+        <h1 style={styles.appHeaderH1}>Library Management System</h1>
+        <nav>
+          <ul style={styles.navUl}>
+            <li style={styles.navLi}><Link style={styles.navA} to="/app">Books</Link></li>
+            <li style={styles.navLi}><Link style={styles.navA} to="/app/customers">Customers</Link></li>
+            <li style={styles.navLi}><Link style={styles.navA} to="/app/borrowings">Borrowings</Link></li>
+            <li style={styles.navLi}><Link style={styles.navA} to="/app/add-borrowing">Add Borrowing</Link></li>
+          </ul>
+        </nav>
+      </header>
+      <main className="app-content">
+        <Routes>
+          <Route path="/" element={<BookList />} />
+          <Route path="/customers" element={<CustomerList />} />
+          <Route path="/borrowings" element={<BorrowingList />} />
+          <Route path="/add-borrowing" element={<AddBorrowing />} />
+        </Routes>
+      </main>
+    </div>
   );
 }
 

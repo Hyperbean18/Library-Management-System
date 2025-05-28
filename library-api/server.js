@@ -8,29 +8,74 @@ const port = 5000;
 app.use(cors());
 app.use(express.json());
 
-// Create database connection
-const db = mysql.createConnection({
-  host: 'localhost',
-  user: 'root',  // Using the staff user with appropriate permissions
-  password: '8008',
-  database: 'library_management_system'
+// Database connection creator function
+const createDbConnection = (credentials) => {
+  return mysql.createConnection({
+    host: 'localhost',
+    user: credentials.username || 'guest', // Default to limited access if no credentials
+    password: credentials.password || '',
+    database: 'library_management_system'
+  });
+};
+
+// Default connection for unauthenticated requests
+let defaultDb = createDbConnection({
+  username: 'library_viewer',
+  password: 'view_password'
 });
 
-// Connect to database
-db.connect(err => {
+defaultDb.connect(err => {
   if (err) {
-    console.error('Error connecting to the database:', err);
+    console.error('Error connecting to the default database:', err);
     return;
   }
-  console.log('Connected to the database');
+  console.log('Connected to the default database');
 });
+
+// Middleware to handle authentication
+const authMiddleware = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  
+  if (!authHeader || !authHeader.startsWith('Basic ')) {
+    // Use default connection for unauthenticated requests
+    req.db = defaultDb;
+    return next();
+  }
+  
+  try {
+    // Get credentials from Authorization header
+    const base64Credentials = authHeader.split(' ')[1];
+    const credentials = Buffer.from(base64Credentials, 'base64').toString('ascii');
+    const [username, password] = credentials.split(':');
+    
+    // Create new connection with provided credentials
+    const userDb = createDbConnection({ username, password });
+    
+    // Test the connection
+    userDb.connect(err => {
+      if (err) {
+        console.error('Authentication failed:', err);
+        return res.status(401).json({ error: 'Authentication failed' });
+      }
+      
+      // Store connection in request object
+      req.db = userDb;
+      next();
+    });
+  } catch (error) {
+    console.error('Auth error:', error);
+    res.status(401).json({ error: 'Authentication failed' });
+  }
+};
+
+// Apply authentication middleware to all routes
+app.use(authMiddleware);
 
 // Books API endpoints
 app.get('/api/books', (req, res) => {
-  // Use the book_catalog view instead of trying to join with book_management
   const query = 'SELECT * FROM book_catalog';
   
-  db.query(query, (err, results) => {
+  req.db.query(query, (err, results) => {
     if (err) {
       console.error('Error fetching books:', err);
       return res.status(500).json({ error: 'Internal server error: ' + err.message });
@@ -43,7 +88,7 @@ app.get('/api/books', (req, res) => {
 app.get('/api/books/:isbn', (req, res) => {
   const query = 'SELECT * FROM book_catalog WHERE ISBN = ?';
   
-  db.query(query, [req.params.isbn], (err, results) => {
+  req.db.query(query, [req.params.isbn], (err, results) => {
     if (err) {
       console.error('Error fetching book:', err);
       return res.status(500).json({ error: 'Internal server error: ' + err.message });
@@ -61,7 +106,7 @@ app.get('/api/books/:isbn', (req, res) => {
 app.get('/api/customers', (req, res) => {
   const query = 'SELECT * FROM customer_directory';
   
-  db.query(query, (err, results) => {
+  req.db.query(query, (err, results) => {
     if (err) {
       console.error('Error fetching customers:', err);
       return res.status(500).json({ error: 'Internal server error: ' + err.message });
@@ -74,7 +119,7 @@ app.get('/api/customers', (req, res) => {
 app.get('/api/borrowings', (req, res) => {
   const query = 'SELECT * FROM borrowing_status';
   
-  db.query(query, (err, results) => {
+  req.db.query(query, (err, results) => {
     if (err) {
       console.error('Error fetching borrowings:', err);
       return res.status(500).json({ error: 'Internal server error: ' + err.message });
@@ -92,7 +137,7 @@ app.post('/api/borrowings', (req, res) => {
   }
   
   // Start a transaction to ensure data consistency
-  db.beginTransaction(err => {
+  req.db.beginTransaction(err => {
     if (err) {
       console.error('Error starting transaction:', err);
       return res.status(500).json({ error: 'Internal server error: ' + err.message });
@@ -101,18 +146,17 @@ app.post('/api/borrowings', (req, res) => {
     // First, add borrowing record
     const borrowingQuery = 'INSERT INTO borrowing_management (CustomerID, ISBN, BorrowingDate, ReturnDate) VALUES (?, ?, ?, ?)';
     
-    db.query(borrowingQuery, [customerID, isbn, borrowingDate, returnDate], (err, results) => {
+    req.db.query(borrowingQuery, [customerID, isbn, borrowingDate, returnDate], (err, results) => {
       if (err) {
-        return db.rollback(() => {
+        return req.db.rollback(() => {
           console.error('Error adding borrowing record:', err);
           res.status(500).json({ error: 'Internal server error: ' + err.message });
         });
       }
       
-      // No need to manually update book availability as the trigger will handle it
-      db.commit(err => {
+      req.db.commit(err => {
         if (err) {
-          return db.rollback(() => {
+          return req.db.rollback(() => {
             console.error('Error committing transaction:', err);
             res.status(500).json({ error: 'Internal server error: ' + err.message });
           });
@@ -134,7 +178,7 @@ app.put('/api/books/:isbn', (req, res) => {
   
   const query = 'UPDATE book_management SET AvailabilityStatus = ? WHERE ISBN = ?';
   
-  db.query(query, [availabilityStatus, req.params.isbn], (err, results) => {
+  req.db.query(query, [availabilityStatus, req.params.isbn], (err, results) => {
     if (err) {
       console.error('Error updating book:', err);
       return res.status(500).json({ error: 'Internal server error: ' + err.message });
